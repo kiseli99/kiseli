@@ -1,0 +1,95 @@
+#include <avr/io.h>
+#include <avr/interrupt.h>
+const unsigned char cifre[] = {
+	0x05,0xdd, 0x46, 0x54, 0x9c, 0x34, 0x24, 0x5d, 0x04, 0x14
+};
+unsigned char DISP_BAFER[4] ={0xff,0xff,0xff,cifre[0]};
+const unsigned char minus = 0xfe;
+unsigned char ukljuceno = 1;
+volatile unsigned long ms = 0;
+volatile unsigned char disp = 3;
+volatile int number = 0;
+ 
+ISR(TIMER0_COMPRA_vect){
+   
+    if(++disp > 3)
+    disp = 0;
+    PORTB = ~(1 << (3-disp));
+    PORTD = DISP_BAFER[disp];
+    ms++;
+  }
+
+ISR(PCINT1_vect)
+  {
+      switch((~PINC) & 0x0a) {
+      case 0x02:
+        ukljuceno = 1;
+        number--;
+        break;
+      case 0x08:
+        ukljuceno = 0;
+        number++;
+        break;
+      }
+  }	
+  int main(){
+   	  int pom1, pom2, mi=0,zero=0;
+      char i;
+      unsigned long t0;
+      DDRB = 0x0f;
+      DDRC = 0x00;
+      DDRD = 0xff;
+
+      PCICR = (1<<PCIE1);
+      PCMSK1 = 0x0a;
+
+      TCCR0A = 0x02;
+      TCCR0B = 0x03;
+      OCR0A = 249;
+      TIMSK0 = 0x02;
+
+      sei();
+
+      while(1) {
+        
+        t0 = ms;
+        while((ms-t0)<100);
+        pom1 = number;
+        if(pom1<0){
+        pom1*= (-1);
+          for(i = 3; i > 0; i--){
+          pom2= pom1%10;
+            DISP_BAFER[i] = cifre[pom2];
+            pom1/=10;
+            if(pom2!=0){
+            mi = i;
+            zero =i-1;
+            }
+          }
+          DISP_BAFER[mi-1] = minus;
+          mi = 0;
+          for(i=0;i<zero;i++){
+            DISP_BAFER[i] = 0xff;
+          }
+        } else if(pom1!=0){
+          for(i = 3; i>= 0; i--){
+          pom2=pom1%10;
+           DISP_BAFER[i] = cifre[pom2];
+            pom1/=10;
+            if(pom2!=0){
+                zero = i;
+            }
+          }
+          for(i = 0; i<zero;i++){
+            DISP_BAFER[i] = 0xff;
+
+          }
+        } else{
+          DISP_BAFER[3] = cifre[0];
+          DISP_BAFER[2] = 0xff;
+          DISP_BAFER[1] = 0xff;
+          DISP_BAFER[0] = 0xff;
+        }
+    }
+    return 0;
+  }
