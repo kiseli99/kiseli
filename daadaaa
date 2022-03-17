@@ -1,0 +1,100 @@
+#include <stdint.h>
+#include "system.h"
+#include <stdio.h>
+
+#define pio_p32 ((volatile uint32_t*)PIO_BASE)
+
+#define PIO_LED0 0
+#define PIO_SW0 8
+#define PIO_LED_PACKED 16
+#define PIO_SW_PACKED 17
+
+#define digits_p32 ((volatile uint32_t*)DIGITS_BASE)
+
+#define SEGM_0             0
+#define SEGM_1             1
+#define SEGM_2             2
+#define SEGM_3             3
+#define SEGM_PACK          4
+
+typedef struct
+{
+	// Unpacked.
+	// reg 0-7
+	uint32_t led_unpacked[8];
+	// reg 8-15
+	uint32_t sw_unpacked[8];
+	// Packed.
+	// reg 16
+	unsigned led_packed : 8;
+	unsigned            : 24;
+	// reg 17
+	unsigned sw_packed  : 8;
+	unsigned            : 24;
+	uint32_t babadeda[14];
+} bf_pio;
+
+#define pio (*((volatile bf_pio*)PIO_BASE))
+
+void busy_wait(int ms)
+{
+	//TODO
+	for(int i = 0; i < 1000000000*ms; i++);
+}
+
+writeOutput(uint8_t L[], uint8_t R[])
+{
+	*(digits_p32 + SEGM_PACK) = 0;
+	*(digits_p32 + SEGM_PACK) = (L[1] << 12) | (L[0] << 8) | (R[1] << 4) | (R[0]);
+}
+
+int main()
+{
+	uint8_t R[2] = {9, 0}; //white
+	uint8_t L[2] = {9, 0}; //black
+
+	uint8_t sw[3];
+
+	while(1){
+		///////////////////
+		// Read inputs.
+		sw[0] = *(pio_p32 + PIO_SW_PACKED) & 1; //0 switch
+		sw[1] = *(pio_p32 + PIO_SW_PACKED) & 2; //1 switch
+		sw[3] = *(pio_p32 + PIO_SW_PACKED) & 0x80; //7 switch
+
+		///////////////////
+		// Calculate state.
+		busy_wait(1);
+		
+		if(sw[0]) //reset
+		{
+			R[0] = 9;
+			R[1] = 0;
+			L[0] = 9;
+			L[1] = 0;
+			writeOutput(L, R);
+			continue;
+		}
+		else if(sw[1]) //pause
+		{
+			continue;
+		}
+		else if(sw[3]) //black
+		{
+			pio.led_unpacked[0] = 0;
+			pio.led_unpacked[7] = 1;
+
+			if(L[1] == 0)
+			{
+				L[1] = 9;
+				L[0] -= 1;
+			}
+			else
+			{
+				L[1] -= 1;
+			}
+		}
+		else //white
+		{
+			pio.led_unpacked[0] = 1;
+			pio.led_unpacked[7] = 0;
